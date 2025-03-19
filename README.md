@@ -1,8 +1,10 @@
 # A Simple Graph Processing Software for Shared Disaggregated Memory
 
-A single threaded graph processing framework where is memory is manually
-managed.
-Useful for disaggregated memories.
+A single threaded graph processing framework where a graph is allocated on a
+shared memory and workers (either processes or hosts) can work on the same
+graph together.
+
+Use-case: Shared disaggregated memories.
 
 This is a simple framework for graph processing.
 I have implemented this to quickly test multihost graph processing.
@@ -36,7 +38,7 @@ CSR graph in memory.
 `class Graph` is a host-side object, that has a pointer to the start of the
 remote memory.
 It assumes that the remote memory is a memory-mapped range on the
-disaggreged/remote device.
+disaggregated/remote device.
 Only the allocator initializes the graph, which also needs to be the master
 node.
 Once the setup is complete, a synchronization variable is set in the shared
@@ -61,7 +63,7 @@ Sample graphs are stored in `tests/` directory.
 
 The graph is stored pretty much the same way in the memory with the addition
 of some more metadata.
-All entries are assumed to be `uint64_t`.
+All entries are assumed to be `int`.
 Following the a flat representation of the mmaped region.
 ```
 _____________________________________________________________________ .. ______
@@ -70,11 +72,11 @@ _____________________________________________________________________ .. ______
 <---------- METADATA (6) ---------->|         |         |
                                     | int *column_index |
                                     |                   |
-                            int* row_pointer        int * weights
+                            int* row_pointer        int *weights
 ```
 
 The start of the graph is stored as _graph in class Graph.
-Each entry is separated by sizeof(uint64_t).
+Each entry is separated by sizeof(int).
 
 ## Building
 
@@ -91,6 +93,23 @@ make -j4
 
 ## Testing
 
+### Command-line arguments
+
+In this version, we take in the following arguments:
+```txt
+This program understands the following arguments:
+    -a --algorithm  algorithm to run bc, bfs, cc, dfs, pr, sssp, tc, allocator
+    -g --graph      path to a graph 
+    -t --total-hosts        total number of hosts 
+    -i --host-id    ID of the current host 
+    -h --help       display this message 
+    -v --verbose    enable verbose 
+    -z --test-mode  enable testing mode (uses shmem interface) [false], true
+    -r --randomize  randomize the starting node [false], true
+    -d --display    display output in stdout false, [true]
+
+```
+
 ### Quick Testing
 
 To test on a single system, you need to enable huge pages.
@@ -104,10 +123,31 @@ processing algorithm.
 
 ```sh
 # make sure to enable testing mode and enable verbose
-sudo ./simple_graph \
+./simple_graph \
         --graph ../tests/graph4.csr \
         --host-id 0 \
-        --total-hosts 1 \
+        --total-hosts 3 \
+        --test-mode true \
+        --algorithm allocator \         # can also be allocator and worker
+        -v
+```
+A different process can be started with a different algorithm working on the
+same graph.
+```sh
+# make sure to enable testing mode and enable verbose
+./simple_graph \
+        --graph ../tests/graph4.csr \
+        --host-id 1 \                   # worker node 1
+        --total-hosts 3 \
+        --test-mode true \
+        --algorithm sssp \
+        -v  &
+        ```sh
+# make sure to enable testing mode and enable verbose
+./simple_graph \
+        --graph ../tests/graph4.csr \
+        --host-id 2 \                   # worker node 2
+        --total-hosts 3 \
         --test-mode true \
         --algorithm dfs \
         -v
@@ -121,6 +161,8 @@ TODO.
 
 ## Roadmap
 
+- [*] Test with large(r) graphs
+- [ ] Update the algorithms to be HPC-compatible.
 - [ ] Add `gem5` annotations to enable gem5 testing faster.
 - [ ] Make `MAP_SHARED` work on a single host.
 - [ ] `allocator` and `host_id` arguments are conflicting.

@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     // Allocate memory for the parser and initialize the arguments.
     args.allocArgs(expected_count);
     args.initArgs("-a", "--algorithm", "algorithm to run",
-                                        "bfs, dfs, sssp, bc, tc, allocator");
+                                "bc, bfs, cc, dfs, pr, sssp, tc, allocator");
     args.initArgs("-g", "--graph", "path to a graph", "");
     args.initArgs("-t", "--total-hosts", "total number of hosts", "");
     args.initArgs("-i", "--host-id", "ID of the current host", "");
