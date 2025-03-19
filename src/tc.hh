@@ -7,10 +7,10 @@
 namespace simple {
 class TC  {
     private:
-        uint64_t triangle_count;
+        int triangle_count;
     protected:
-        uint64_t min(uint64_t a, uint64_t b);
-        uint64_t intersectCount(Graph *G, uint64_t start, uint64_t end, size_t len1, size_t len2);
+        int min(int a, int b);
+        int intersectCount(Graph *G, int start, int end, int len1, int len2);
     public:
         TC(Graph *G);
 };

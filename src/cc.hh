@@ -10,7 +10,7 @@
 namespace simple {
 class CC {
     protected:
-        void printCC(int* component, size_t size);
+        void printCC(int* component, int size);
     public:
         CC(Graph *G);
 };

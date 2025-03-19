@@ -10,7 +10,7 @@ CC::CC(Graph *G) {
     int *visited = (int *) calloc (G->getV(), sizeof(int));
     int component_id = 0;
 
-    for (size_t i = 0 ; i < G->getV(); i++) {
+    for (int i = 0 ; i < G->getV(); i++) {
         if (!visited[i]) {
             // Need to call an API that does DFS and does not print the results
             // on stdout.
@@ -20,13 +20,15 @@ CC::CC(Graph *G) {
     }
     free(visited);
 
-    printCC(component, G->getV());
+    if (G->doDisplay())
+        printCC(component, G->getV());
+        
     free(component);
     delete dfs;
     std::cout << std::endl;
 }
-void CC::printCC(int* component, size_t size) {
-    for (size_t i = 0 ; i < size ; i++)
+void CC::printCC(int* component, int size) {
+    for (int i = 0 ; i < size ; i++)
         std::cout << "  Vertex: " << i << " Component: " << component[i] << std::endl;
 }
 }

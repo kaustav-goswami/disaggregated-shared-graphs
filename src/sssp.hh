@@ -13,8 +13,8 @@ namespace simple {
 class SSSP  {
     private:
     public:
-        SSSP(Graph *G, uint64_t source);
-        void dijkstra(Graph *G, uint64_t source);
+        SSSP(Graph *G, int source);
+        void dijkstra(Graph *G, int source);
 };
 }
 #endif

@@ -9,7 +9,7 @@ namespace simple {
 class BFS  {
     private:
     public:
-        BFS(Graph *G, uint64_t starting_node);
+        BFS(Graph *G, int starting_node);
 };
 }
 #endif

@@ -4,7 +4,7 @@ namespace simple {
 DFS::DFS() {
     // someone wants to use DFS as an algorithm.
 }
-DFS::DFS(Graph *G, uint64_t starting_vertex) {
+DFS::DFS(Graph *G, int starting_vertex) {
     // Need to do something? 
     // The algo user shoud not be doing addressing.
     // volatile char* starting_addr = G->getStartingAddr();
@@ -13,35 +13,36 @@ DFS::DFS(Graph *G, uint64_t starting_vertex) {
     
     // visited for the starting node must be filled up no?
     visited[starting_vertex] = 1;
-    for (size_t i = 0 ; i < G->getV() ; i++) {
+    for (int i = 0 ; i < G->getV() ; i++) {
         if (!visited[i])
             dfs(G, i, visited); // , pointer_to_row_ptr, pointer_to_col_idx);
     }
     std::cout << std::endl;
 }
 
-void DFS::dfs(Graph *G, uint64_t vertex, int *visited) {
+void DFS::dfs(Graph *G, int vertex, int *visited) {
     visited[vertex] = 1;
-    std::cout << vertex << " ";
+    if (G->doDisplay())
+        std::cout << vertex << " ";
 
     for (int i = G->row_pointer[vertex];
                 i < G->row_pointer[vertex + 1]; i++) {
-        uint64_t neighbor = G->column_index[i];
+        int neighbor = G->column_index[i];
         if (!visited[neighbor])
             dfs(G, neighbor, visited);
     }
 }
 
-void DFS::dfsAPI(Graph *G, uint64_t vertex, int *visited, int component_id,
+void DFS::dfsAPI(Graph *G, int vertex, int *visited, int component_id,
                                                             int* component) {
     visited[vertex] = 1;
     component[vertex] = component_id;
 
-    uint64_t row_start = G->row_pointer[vertex];
-    uint64_t row_end = G->row_pointer[vertex + 1];
+    int row_start = G->row_pointer[vertex];
+    int row_end = G->row_pointer[vertex + 1];
 
-    for (size_t i = row_start; i < row_end ; i++) {
-        uint64_t neighbor = G->column_index[i];
+    for (int i = row_start; i < row_end ; i++) {
+        int neighbor = G->column_index[i];
         if (!visited[neighbor])
             dfsAPI(G, neighbor, visited, component_id, component);
     }

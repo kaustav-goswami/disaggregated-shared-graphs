@@ -46,8 +46,7 @@ enum OffsetList {
 #pragma once
 enum SyncState {
     ALLOCATING,
-    READY,
-    COMPLETE
+    READY
 };
 
 #pragma once
@@ -62,7 +61,7 @@ class Graph {
         // The CSRs metadata is stored as independent variables in the local
         // memory. The metadata includes the number of edges, vertices, size of
         // the row_pointer array, size of the column_idx array and a
-        // synchronization variable aligned by uint64_t. The metadata is also
+        // synchronization variable aligned by int. The metadata is also
         // stored on the mmap.
         // ___________________________________________________________ .. _____
         // | V | E | size | size | sync | row | col | weights                 |
@@ -70,16 +69,23 @@ class Graph {
         //
         // The graph constructor will set these variables.
         //
-        uint64_t _V;
-        uint64_t _E;
-        size_t _size_row_pointer;
-        size_t _size_col_idx;
-        size_t _size_weights;
-        uint64_t _local_sync_copy;
+        int _V;
+        int _E;
+        int _size_row_pointer;
+        int _size_col_idx;
+        int _size_weights;
+        int _local_sync_copy;
+        // We need a collective structure to maintain all the metadata
+        // privately. This will be an array of the first 6 elements.
+        int *_metadata;
+
         // need to set a boolean to determine if there are weights
         bool _has_weight;
         // Assign a verbose variable and another for test
         bool _test;
+        // Need avariable for randomization
+        bool _randomize;
+        bool _display;
         bool _verbose;
         // The master node will write the graph from the given file into the
         // mmaped space!
@@ -88,15 +94,16 @@ class Graph {
         // Need to add a couple of set methods to make my life easier to set
         // the metadata and debug more easily
         // TODO
-        void setV(uint64_t value);
-        void setE(uint64_t value);
-        void setRowPointerSize(size_t value);
-        void setColIndexSize(size_t value);
-        void setWeightsSize(size_t value);
+        void setV(int value);
+        void setE(int value);
+        void setRowPointerSize(int value);
+        void setColIndexSize(int value);
+        void setWeightsSize(int value);
     public:
         // The graph object should be allocated however, this object does not
         // store the graph. Instead it is a wrapper around a mmap
-        Graph(std::string path, int host_id, bool test, bool verbose);
+        Graph(std::string path, int host_id, bool test, bool randomize,
+                                                bool display, bool verbose);
         // To remove offset value retrival, we'll use three pointers for
         // getting the rowpointer, colindex and the weights directly from the
         // object; the read/write permissions will be set by the mmap call
@@ -104,17 +111,21 @@ class Graph {
         int *row_pointer;
         int *column_index;
         int *weights;
-        // Format of the graph should include uint64_t to support outgoing
-        // edges of up to 2^64 - 1.
-        uint64_t getOffset(size_t index);
+        // Format of the graph should include int a normal range of values.
+        int getOffset(int index);
         // We finally need some public methods that makes life easier to
-        // program the grraph algorithm
-        uint64_t getV();
-        uint64_t getE();
-        uint64_t getRowPointerSize();
-        uint64_t getColIndexSize();
-        uint64_t getWeightsSize();
+        // program the grraph algorithm. The values can be read out the
+        // metadata array direcly but we want to prevent that!
+        int getV();
+        int getE();
+        int getRowPointerSize();
+        int getColIndexSize();
+        int getWeightsSize();
         void printGraph();
+
+        // Need a getter method for the starting node.
+        int getStartingNode();
+        inline bool doDisplay() { return _display; };
 };
 }
 // extern class Graph *G;

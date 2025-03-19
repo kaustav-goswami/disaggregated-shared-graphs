@@ -5,27 +5,48 @@
 
 namespace simple {
 Graph::Graph(std::string path, int host_id, bool test = false,
-                bool verbose = false) : _test(test), _verbose(verbose) {
+            bool randomize = false, bool display = true, bool verbose = false)
+            : _test(test),
+              _randomize(randomize),
+              _display(display),
+              _verbose(verbose) {
     // Allocate the graph using dalloc. Ignore the class method. Make sure that
     // the user is running it in gem5. If not, the test mode must be true.
-    if (_test)
-        _graph = hmalloc(1 >> 30, host_id);
-    else
-        _graph = dmalloc(1 >> 30, host_id);
+    if (_test) {
+        // if verbose is enabled, then print the message notifying the user.
+        // huge page is currently disabled. we'll add that feature back with
+        // madvise so that the user doesn't need root anymore.
+        if (verbose)
+            std::cout << "info: shmem will be used!" << std::endl;
+        this->_graph = shmalloc(0x40000000, host_id);
+    }
+    else {
+        // if verbose is enabled, then print the message notifying the user
+        if (verbose)
+            std::cout << "info: /dev/dax0.0 will be used!" << std::endl;
+        this->_graph = dmalloc(0x40000000, host_id);
+    }
+    // Assign the metadata array so that we dont have to deal with offsets in
+    // this implementation. Doesn't matter if I am the master or a worker.
+    this->_metadata = &_graph[0];
 
     // Allocation complete! If I am the master, set the synchronization
     if (host_id == 0) {
         // Wait, first write the graph!
+        this->_metadata[SYNC] = ALLOCATING;
         graphWriter(path);
-        *((uint64_t *) (_graph + getOffset(SYNC))) = 1;
+        this->_metadata[SYNC] = READY;
         // Honestly, the master can now end the process!
     }
     else {
         // variable to true and let the workers start working.
         do {
-            _local_sync_copy = \
-                        *((uint64_t *) (_graph + getOffset(SYNC)));
-            if (_local_sync_copy == 1)
+            // This is a memory pooling statement, which needs the value to be
+            // refreshed! We can implement this as a mwait instead of a pool
+            _local_sync_copy = this->_metadata[SYNC];
+
+            // The worker will wait.
+            if (_local_sync_copy == READY)
                 break;
         } while (_local_sync_copy != 1);
 
@@ -34,14 +55,13 @@ Graph::Graph(std::string path, int host_id, bool test = false,
         // own private variables. But the workers needs to wait until master
         // sets these up. The setter methods right now sets both these
         // values up, so this part has to be done manually;
-        _V = *((uint64_t *) (_graph + getOffset(VERTEX)));
-        _E = *((uint64_t *) (_graph + getOffset(EDGE)));
-        _size_row_pointer = \
-                        *((uint64_t *) (_graph + getOffset(ROWP_SIZE)));
-        _size_col_idx = \
-                        *((uint64_t *) (_graph + getOffset(COLI_SIZE)));
-        _size_weights = \
-                    *((uint64_t *) (_graph + getOffset(WEIGHT_SIZE)));
+        _V = this->_metadata[VERTEX];
+        _E = this->_metadata[EDGE];
+
+        _size_row_pointer = this->_metadata[ROWP_SIZE];
+        _size_col_idx = this->_metadata[COLI_SIZE];
+        _size_weights = this->_metadata[WEIGHT_SIZE];
+
         if (_size_weights == 0)
             _has_weight = false;
         else
@@ -63,7 +83,9 @@ Graph::Graph(std::string path, int host_id, bool test = false,
         printGraph();
 }
 
-uint64_t Graph::getOffset(size_t index) {
+int Graph::getOffset(int index) {
+    // In the stable version with integers, we deprecate this function!
+    assert(false && "deprecated: using offsets for the mmap is removed!");
     // Returns the offset which when added to the start address gives the value
     // stored at that offset.
     return index * sizeof(uint64_t);
@@ -92,16 +114,16 @@ void Graph::graphWriter(std::string path) {
             // Line 3: row_pointer_array
             // Line 4: column_index_array
             // Line 5: weights (optional)
-            char *end;
+
             char *cstr = new char[lines.length()];
             std::strcpy(cstr, lines.c_str());
 
             // For each line, do something!
             if (line_count == 0) {
-                setV(strtoull(cstr, &end, 10));
+                setV(std::stoi(cstr));
             }
             else if (line_count == 1) {
-                setE(strtoull(cstr, &end, 10));
+                setE(std::stoi(cstr));
             }
             else if (line_count == 2) {
                 // We will start writing the graph into the mmap space.
@@ -112,10 +134,10 @@ void Graph::graphWriter(std::string path) {
 
                 // First break up all the numbers, then set the total size.
                 char *words = strtok(cstr, " ");
-                uint64_t size = 0;
+                int size = 0;
                 while (words != nullptr) {
                     // The setter methods should easily do the trick!
-                    row_pointer[size++] = strtoull(words, &end, 10);
+                    row_pointer[size++] = std::stoi(words);
                     words = strtok(nullptr, " ");
                 }
                 // Finally set the offset value correctly via the setter method
@@ -131,10 +153,10 @@ void Graph::graphWriter(std::string path) {
 
                 // First break up all the numbers, then set the total size.
                 char *words = strtok(cstr, " ");
-                uint64_t size = 0;
+                int size = 0;
                 while (words != nullptr) {
                     // The setter methods should easily do the trick!
-                    column_index[size++] = strtoull(words, &end, 10);
+                    column_index[size++] = std::stoi(words);
                     words = strtok(nullptr, " ");
                 }
                 // Finally set the offset value correctly via the setter method
@@ -164,7 +186,7 @@ void Graph::graphWriter(std::string path) {
                     
                     while (words != nullptr) {
                         // The setter methods should easily do the trick!
-                        weights[size++] = strtoull(words, &end, 10);
+                        weights[size++] = std::stoi(words);
                         words = strtok(nullptr, " ");
                     }
                     // Finally set the offset value correctly.
@@ -199,17 +221,17 @@ void Graph::printGraph() {
     std::cout << "Weights Size = " << getWeightsSize() << std::endl;
 
     std::cout << "N = [ ";
-    for (size_t i = 0 ; i < getRowPointerSize() ; i++)
+    for (int i = 0 ; i < getRowPointerSize() ; i++)
         std::cout << this->row_pointer[i] << " ";
 
     std::cout << "]\nF = [ " ;
-    for (size_t i = 0 ; i < getColIndexSize() ; i++)
+    for (int i = 0 ; i < getColIndexSize() ; i++)
         std::cout << column_index[i] << " ";
         
     std::cout << "]\nW = [ ";
     
     if (_has_weight) {
-        for (size_t i = 0 ; i < getWeightsSize() ; i++)
+        for (int i = 0 ; i < getWeightsSize() ; i++)
         std::cout << weights[i] << " ";
     }
     std::cout << "]" << std::endl;
@@ -218,44 +240,58 @@ void Graph::printGraph() {
 
 // Defining all the getter methods here. For most of the code, use the getter
 // methods instead of using the private variable directly.
-uint64_t Graph::getV() {
+int Graph::getV() {
     return _V;
 }
 
-uint64_t Graph::getE() {
+int Graph::getE() {
     return _E;
 }
-uint64_t Graph::getRowPointerSize() {
+int Graph::getRowPointerSize() {
     return _size_row_pointer;
 }
-uint64_t Graph::getColIndexSize() {
+int Graph::getColIndexSize() {
     return _size_col_idx;
 }
-uint64_t Graph::getWeightsSize() {
+int Graph::getWeightsSize() {
     return _size_weights;
+}
+
+// need a method to get a random node that exits in the graph!
+int Graph::getStartingNode() {
+    int return_value;
+    if (this->_randomize) {
+        srand(time(NULL));
+        int r = rand() % getRowPointerSize();
+        return_value = row_pointer[r];
+    }
+    else {
+        return_value = row_pointer[0];
+    }
+    return return_value;
 }
 
 // Writing protected setter methods. Only this and its children should be able
 // to set the private variables. The setter methods SETS BOTH THE MMAP and THE
 // PRIVATE variables!
-void Graph::setV(uint64_t value) {
-    *((uint64_t *) (_graph + getOffset(VERTEX))) = value;
+void Graph::setV(int value) {
+    this->_metadata[VERTEX] = value;
     _V = value;
 }
-void Graph::setE(uint64_t value) {
-    *((uint64_t *) (_graph + getOffset(EDGE))) = value;
+void Graph::setE(int value) {
+    this->_metadata[EDGE] = value;
     _E = value;
 }
-void Graph::setRowPointerSize(size_t size) {
-    *((uint64_t *) (_graph + getOffset(ROWP_SIZE))) = size;
+void Graph::setRowPointerSize(int size) {
+    this->_metadata[ROWP_SIZE] = size;
     _size_row_pointer = size;
 }
-void Graph::setColIndexSize(size_t size) {
-    *((uint64_t *) (_graph + getOffset(COLI_SIZE))) = size;
+void Graph::setColIndexSize(int size) {
+    this->_metadata[COLI_SIZE] = size;
     _size_col_idx = size;
 }
-void Graph::setWeightsSize(size_t size) {
-    *((uint64_t *) (_graph + getOffset(WEIGHT_SIZE))) = size;
+void Graph::setWeightsSize(int size) {
+    this->_metadata[WEIGHT_SIZE] = size;
     _size_weights = size;
 }
 }

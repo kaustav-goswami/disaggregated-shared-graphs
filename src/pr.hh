@@ -11,19 +11,19 @@ class PR {
     private:
         double _damping_factor;
         double _epsilon;
-        size_t _max_iterations;
+        int _max_iterations;
 
     protected:
         void calculateOutDegrees(Graph *G, int *out_degrees);
         void setMetaParams(
-                double damping_factor, double epsilon, size_t max_iterations);
+                double damping_factor, double epsilon, int max_iterations);
         void pageRank(Graph *G);
-        void printRank(double *rank, size_t size);
+        void printRank(double *rank, int size);
     
     public:
         PR(Graph *G);
         PR(Graph *G, double damping_factor, double epsilon,
-                                                        size_t max_iterations);
+                                                        int max_iterations);
 };
 }
 #endif

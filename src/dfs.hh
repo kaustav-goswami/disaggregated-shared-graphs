@@ -11,11 +11,11 @@ class DFS  {
     private:
     public:
         DFS();
-        DFS(Graph *G, uint64_t starting_vertex);
+        DFS(Graph *G, int starting_vertex);
         // An API like method for other classes to use DFS.
-        void dfsAPI(Graph *G, uint64_t vertex, int *visited, int component_id,
+        void dfsAPI(Graph *G, int vertex, int *visited, int component_id,
                                                                int* component);
-        void dfs(Graph *G, uint64_t vertex, int *visited);
+        void dfs(Graph *G, int vertex, int *visited);
 };
 }
 #endif

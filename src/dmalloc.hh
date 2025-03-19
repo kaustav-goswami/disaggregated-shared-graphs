@@ -116,4 +116,48 @@ int* hmalloc(size_t size, int host_id) {
 
 }
 
+int *shmalloc(size_t size, int host_id) {
+    // To be used with SHMEM backed by a file on a single host for testing.
+    //
+    // This function will create a MAP_SHARED memory map for the graph. The
+    // idea is to allocate the graph (potentially a large graph) in the
+    // remote/disaggregated memory and only the master will have RDWR flag. All
+    // other hosts should only have READ permission. It uses Linux shmem.
+    //
+    // @params
+    // :size: Size of requested memory in bytes
+    // :host_id: An ID sent to dictate whether this is a master or a worker
+    //
+    // @returns
+    // A pointer to the mmap call
+    
+    // Ideally we don't want the worker nodes to have WRITE permission on the
+    // shmem region. We'll fix that in a later iteration.
+    int fd = shm_open("/my_shmem2", O_CREAT | O_RDWR, 0666);
+    if (fd == -1) {
+        // The shmem call failed on the file or permissions.
+        perror("shm_open");
+        exit(EXIT_FAILURE);
+    }
+
+    if (ftruncate(fd, size) == -1) {
+        perror("ftruncate");
+        exit(EXIT_FAILURE);
+    }
+
+    int *ptr = nullptr;
+    
+    // TODO: depending upon the host id, we'll set the read/write permissons.
+    // For simplicity, we are using the same permission for now.
+    if (host_id == 0)
+        ptr = (int *) mmap(
+                NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    else
+        // This is a client host.
+        // TODO: Warning: repeated code. Needs to updated ASAP.
+        ptr = (int *) mmap(
+                NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    return ptr;
+}
+
 #endif
