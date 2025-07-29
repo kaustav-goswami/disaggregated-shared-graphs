@@ -1,4 +1,4 @@
-#ifndef GRAPH_hH_
+#ifndef GRAPH_HH_
 #define GRAPH_HH_
 
 #include <iostream>
@@ -21,6 +21,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+// This is the updated version that supports metadata about graph cuts. While
+// the rest of the structure of the graphs will remain the same, the initial
+// head will have more info. This version supports upto 1024 cuts.
+#define MAX_CUTS 1024
+
+// We do not support weights in this version.
+
 // To implement a graph, we need to hardcode the metadata of the graph. In this
 // simple graph processing framework, we'll support simple directed and
 // weighted graphs. The length of the metadata includes the number of vertices,
@@ -42,6 +49,21 @@ enum OffsetList {
     SYNC
 };
 
+#pragma once
+// For better readability, there are a bunch of typedefs
+typedef struct cut_info cut_t;
+
+struct cut_info {
+    int starting_node;                  // Vertex where the cut starts
+    int ending_node;                    // Vertex where the cut ends
+    int num_nodes;
+    int num_edges;
+    int *ptr_to_start_in_indices;       // pointer to the index array
+    int index_end;                      // until when the pointers are valid
+    int *ptr_to_start_in_indptr;        // pointer to the indptr array
+    int indptr_end;                     // until when the indptr are valid
+};
+
 // Synchronization states should also be encoded into enum
 #pragma once
 enum SyncState {
@@ -58,6 +80,9 @@ class Graph {
         // std::map<std::string, void*> addr_map;
         // void* _mmap;
         int* _graph;
+        // The middleware needs to be included for me to be able to compile
+        // this file. Circular dependency!
+        graph_t graph_info;
         // The CSRs metadata is stored as independent variables in the local
         // memory. The metadata includes the number of edges, vertices, size of
         // the row_pointer array, size of the column_idx array and a

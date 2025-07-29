@@ -46,6 +46,20 @@ memory range (needs to be uncacheable; must be hardware managed).
 The workers then begin working on the algorithm specified.
 
 Current implementation is single-threaded.
+This is not a high-performance code, and its application is limited to evaluate
+things like security guarantees.
+
+## Subgraphs
+
+This is a special version of the same library where different users can be
+assigned parts of the graph.
+Parts are defined by cuts in the graph.
+Therefore, this version is specific to graphs with natural cuts.
+The idea is to assign permissions per subgraphs to hosts for processing.
+This demonstrates the need for flexible memory permissions in the shared memory
+region.
+The graph metadata on which subgraph to load needs to be provided to the user
+initially.
 
 ## Graph Format
 
@@ -64,7 +78,32 @@ Sample graphs are stored in `tests/` directory.
 The graph is stored pretty much the same way in the memory with the addition
 of some more metadata.
 All entries are assumed to be `int`.
+
+The `struct cut_info` is defined as:
+```c
+typedef struct cut_info cut_t;
+struct cut_info {
+    int starting_node;                  // Vertex where the cut starts
+    int ending_node;                    // Vertex where the cut ends
+    int *ptr_to_start_in_indices;       // pointer to the index array
+    int index_end;                      // until when the pointers are valid
+    int *ptr_to_start_in_indptr;        // pointer to the indptr array
+    int indptr_end;                     // until when the indptr are valid
+};
+```
+
 Following the a flat representation of the mmaped region.
+```
+_______________________________ .. ___
+| Number | cut_t info*               |
+| of cuts|                           |
+|________|_____________________ .. __|
+<-- int -><--- n(cuts) x 1024 ------->
+
+Max is 1024 in this proof-of-concept version.
+```
+The initial metadata is followed by the rest of the graph.
+Any host should not be allowed to read the rest of the graph directly.
 ```
 _____________________________________________________________________ .. ______
 | V | E | size | size | size | sync | row ptr | col idx | weights         | | |

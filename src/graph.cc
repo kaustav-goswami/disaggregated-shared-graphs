@@ -4,6 +4,104 @@
 #include "dmalloc.hh"
 
 namespace simple {
+// This version is strictly for space-control.
+Graph::Graph(std::string path, int subgraph_id, int host_id,
+        bool test = false,
+        bool randomize = false,
+        bool display = true,
+        bool verbose = false) : _test(test), 
+                                _randomize(randomize),
+                                _display(display),
+                                _verbose(verbose) {
+    // this version needs secure_alloc() to function correctly. However, this
+    // needs to sit behind the middleware as for the user, this it doesn't
+    // matter where his graph is located at.
+    
+    // graph info must be private. Let's ask for both read and write
+    // permissions. Why?
+    bool permissions = 0b1;
+    this->_graph_info = graph_middleware(path.c_str(),
+                                        subgraph_id,
+                                        host_id,
+                                        permissions,
+                                        test,
+                                        verbose);
+    // The pointer to the permission table is never given to the user-level
+    // process. Instead, the user-level process only sees the
+    // data_start_pointer as the starting address, if it is given permission to
+    // access the entire memory region.
+    //
+    // In this code, both the pointers are behind the middleware. The
+    // user-level process, that is, this* only gets access to the number of
+    // nodes, edges, (invalid weights), array to row_ptr, array to col_ptr,
+    // invalid weights. Since this is a worker node, it does need another
+    // pointer to the synch variable.
+
+    if (host_id == 0) {
+        // I am the allocator
+    }
+    else {
+        // I am a worker node.
+        this->_metadata = &graph_info->data_ptr[0];
+        // Only the sync variable is accessible by this node. flexible
+        // permissions.
+
+        // variable to true and let the workers start working.
+        do {
+            // This is a memory pooling statement, which needs the value to be
+            // refreshed! We can implement this as a mwait instead of a pool
+            _local_sync_copy = this->_metadata[SYNC];
+
+            // The worker will wait.
+            if (_local_sync_copy == READY)
+                break;
+        } while (_local_sync_copy != 1);
+
+        // The start of the graph is stored in *_graph; Set the rest of the
+        // metadata variables. The master sets these variables up and sets its
+        // own private variables. But the workers needs to wait until master
+        // sets these up. The setter methods right now sets both these
+        // values up, so this part has to be done manually;
+        _V = this->_graph_info->num_nodes;
+        _E = this->_graph_info->num_edges;
+
+        _size_row_pointer = this->_metadata[ROWP_SIZE];
+        _size_col_idx = this->_metadata[COLI_SIZE];
+        _size_weights = this->_metadata[WEIGHT_SIZE];
+
+        if (_size_weights == 0)
+            _has_weight = false;
+        else {
+            _has_weight = true;
+            // This version does not support weighted graphs!
+            std::cout << "fatal! This version foes not support weights!" <<
+                std::endl;
+            exit(-1);
+        }
+
+        // finally allocate the pointer arrays
+        row_pointer = &_graph[METADATA];
+        column_index = &_graph[METADATA + getRowPointerSize()];
+        if (_has_weight == true)
+            weights = &_graph[METADATA + getRowPointerSize() +
+                                                            getColIndexSize()];
+        
+        // The worker is ready to work.
+    }
+    // Be very careful when to use the synchronization variable. It is very
+    // expensive! The allocation is complete and the workers are ready to
+    // start working on the graph!
+    if (_verbose)
+        printGraph();
+        this->_metadata[SYNC] = &graph_info->sync_variable;
+        // loop until the data is ready!
+        while (this->_metadata != READY) {}
+
+        this->_metadata[NODE]
+    }
+
+
+}
 Graph::Graph(std::string path, int host_id, bool test = false,
             bool randomize = false, bool display = true, bool verbose = false)
             : _test(test),
