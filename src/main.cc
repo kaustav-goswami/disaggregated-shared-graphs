@@ -4,14 +4,21 @@
 
 #include "graph.hh"
 #include "dfs.hh"
+#include "dfs_hpc.hh"
 #include "sssp.hh"
 #include "bfs.hh"
 #include "bc.hh"
 #include "tc.hh"
 #include "pr.hh"
 #include "cc.hh"
+#include "lookup.hh"
+
+#include "cc_hpc.hh"
 
 #include "../ext/cpp-arg-parse/src/argparse.hh"
+
+// This is tuned version to work with the SNAP7/Twitter graph. Additional
+// features include loading the graph and resuming the previously loaded graph!
 
 using namespace simple;
 int main(int argc, char *argv[]) {
@@ -19,7 +26,7 @@ int main(int argc, char *argv[]) {
     std::string info = "This program disaggregated processes graphs!";
 
     // Write the expected number of arguments. Keeping it simple!
-    int expected_count = 9;
+    int expected_count = 10;
 
     // Argparse is ready to be initialized.
     Argparse args(argc, expected_count, info);
@@ -28,7 +35,12 @@ int main(int argc, char *argv[]) {
     args.allocArgs(expected_count);
     args.initArgs("-a", "--algorithm", "algorithm to run",
                                 "bc, bfs, cc, dfs, pr, sssp, tc, allocator");
-    args.initArgs("-g", "--graph", "path to a graph", "");
+    args.initArgs("-g", "--graph", "path to a graph. expects the path to"
+            " twitter/SNAP7 graph in el format", "");
+    // Twitter is a huge graph, there needs to be a feature to load the graph
+    // once in the memory and future runs will simply read the graph directly.
+    args.initArgs("-l", "--load", "in case the graph needs to be loaded into"
+            " the memory again.", "[false], true");
     args.initArgs("-t", "--total-hosts", "total number of hosts", "");
     args.initArgs("-i", "--host-id", "ID of the current host", "");
     // special arguments
@@ -51,7 +63,12 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     // See if the user wants test and verbose enabled.
-    bool verbose = false, test_mode = false, randomize = false, display = true;
+    bool verbose = false,
+         test_mode = false,
+         randomize = false,
+         display = true,
+         load = false;
+
     if(args.getArgs("-v") == "1")
         verbose = true;
 
@@ -70,6 +87,9 @@ int main(int argc, char *argv[]) {
     if (args.getArgs("-d") == "false")
         display = false;
 
+    if (args.getArgs("-l") == "true")
+        load = true;
+
     // convert host id
     int host_id = -1;
     try {
@@ -85,9 +105,24 @@ int main(int argc, char *argv[]) {
 
     // ---------------------- end of preprocessing ------------------------- //
 
-    // Create a Graph object for the given graph.
-    Graph *G = new Graph(args.getArgs("-g"), host_id, test_mode, randomize,
-                                                            display, verbose);
+    // Create a Graph object for the given graph. This is when the entire graph
+    // is loaded. We need to implement a middleware, where we specify a graph,
+    // and, a user_group which then determines what part of the graph am i
+    // supposed to access.
+
+    // graph_t *graph = new graph_t;
+
+    // 20 GiB. The twitter graph needs < 6 GiB to be loaded in the memory. use
+    // the util program to load the graph in the shared memory as the allocator 
+    size_t size = 0x500000000;
+    Graph *G = new Graph(args.getArgs("-g"),
+                                            size,
+                                            host_id,
+                                            test_mode,
+                                            randomize,
+                                            display,
+                                            verbose,
+                                            load);
 
     // The graph is allocated or is being allocated. The workers now can go
     // ahead and start the work specified. Notify the user that work is
@@ -106,8 +141,9 @@ int main(int argc, char *argv[]) {
     }
     else if (args.getArgs("-a") == "dfs") {
         // DFS code
-        std::cout << "DFS =======" << std::endl; 
-        DFS *worker = new DFS(G, G->getStartingNode());
+        std::cout << "DFS =======" << std::endl;
+        DFS_HPC *worker = new DFS_HPC(G);
+        // DFS *worker = new DFS(G, G->getStartingNode());
         delete worker;
     }
     else if (args.getArgs("-a") == "sssp") {
@@ -135,7 +171,8 @@ int main(int argc, char *argv[]) {
     }
     else if (args.getArgs("-a") == "cc") {
         std::cout << "CC =======" << std::endl;
-        CC *worker = new CC(G);
+        CC_HPC *worker = new CC_HPC(G);
+        worker->printCC(G);
         delete worker;
     }
     else if (args.getArgs("-a") == "allocator") {
@@ -145,10 +182,24 @@ int main(int argc, char *argv[]) {
         std::cout << " $ prompt $ waiting for the master to end!" << std::endl;
         std::cin >> dummy;
     }
+    else if (args.getArgs("-a") == "lookup") {
+        std::cout << "Lookup =======" << std::endl;
+        const auto start{std::chrono::steady_clock::now()};
+        Lookup *worker = new Lookup(G, "uniform");
+        const auto finish{std::chrono::steady_clock::now()};
+        // print stats?
+        const std::chrono::duration<double> elapsed_seconds{finish - start};
+        std::cout << "Algorithm " << args.getArgs("-a") << " took " <<
+                        elapsed_seconds.count() << " secods" << std::endl;
+        worker->displayRandomResults();
+        delete worker;
+    }
     else {
         std::cout << "Unkonwn algo: " << args.getArgs("-a") << std::endl;
         return -1;
     }
+
+
     // Clear the memory? This will delete the local copy of the object. But
     // make sure that the master does not clear the memory.
     if (host_id != 0)

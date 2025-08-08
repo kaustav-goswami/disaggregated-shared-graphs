@@ -6,6 +6,7 @@
 
 #include "graph.hh"
 #include "dfs.hh"
+#include "dfs_hpc.hh"
 
 namespace simple {
 class CC {
